@@ -1,0 +1,55 @@
+name: Collect crawler dumps
+
+on:
+  schedule:
+    - cron: "43 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data-collection
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download crawler dumps
+        run: python3 collector/collect_dumps.py
+
+      - name: Upload dumps as release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="dumps-$(date -u +%Y-%m)"
+          DAY="$(date -u +%F)"
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "Crawler dumps $(date -u +%Y-%m)" \
+              --notes "Daily crawler dump archive (see data/dumps/manifest.jsonl for checksums)."
+          fi
+          for f in data/dumps/*/"$DAY".*; do
+            [ -e "$f" ] || continue
+            src="$(basename "$(dirname "$f")")"
+            asset="/tmp/${src}-$(basename "$f")"
+            cp "$f" "$asset"
+            gh release upload "$TAG" "$asset" --clobber
+          done
+
+      - name: Commit manifest and push
+        run: |
+          git config user.name "seeder-data-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/dumps/manifest.jsonl
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "dumps: collect $(date -u +'%Y-%m-%d')"
+          git pull --rebase origin main
+          git push origin main

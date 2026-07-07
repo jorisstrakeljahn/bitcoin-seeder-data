@@ -1,0 +1,4 @@
+# Crawler dumps are large (~40 MB/day) and are archived as GitHub release
+# assets by the workflow, not committed. Only the manifest is tracked.
+data/dumps/*/
+__pycache__/
