@@ -85,10 +85,23 @@ CRAWLER_DUMPS = {
 }
 
 # Third-party crawler APIs (JSON responses, stored gzipped as delivered).
+# Note: Blockchair's nodes endpoint only returns a limited "recently
+# active" subset (~300 nodes), not a full crawl.
 API_SOURCES = {
     "blockchair": {
         "url": "https://api.blockchair.com/bitcoin/nodes",
         "operator": "Blockchair",
         "kind": "json",
+    },
+}
+
+# Sources publishing one dated file per day. The collector tries today's
+# date first and falls back up to ``lookback_days`` if not yet published.
+DATED_SOURCES = {
+    "bitmex": {
+        "url_template": "https://bitnod.es/csv/bitcoin_nodes_{date}.csv",
+        "operator": "BitMEX Research (bitnod.es)",
+        "kind": "csv",
+        "lookback_days": 3,
     },
 }

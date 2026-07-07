@@ -15,11 +15,12 @@ import gzip
 import hashlib
 import json
 import sys
+import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from seeds import API_SOURCES, CRAWLER_DUMPS
+from seeds import API_SOURCES, CRAWLER_DUMPS, DATED_SOURCES
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "dumps"
 USER_AGENT = "bitcoin-seeder-data-collector (research archive)"
@@ -32,21 +33,47 @@ def fetch(url: str) -> tuple[int, bytes]:
         return resp.status, resp.read()
 
 
+def resolve_dated(name: str, meta: dict) -> tuple[str, str] | None:
+    """Return (url, date) for the newest available dated file, or None."""
+    today = datetime.now(timezone.utc).date()
+    for offset in range(meta["lookback_days"] + 1):
+        date = (today - timedelta(days=offset)).isoformat()
+        if (DATA_DIR / name / f"{date}.{meta['kind']}.gz").exists():
+            return None  # newest available file already archived
+        url = meta["url_template"].format(date=date)
+        req = urllib.request.Request(url, method="HEAD",
+                                     headers={"User-Agent": USER_AGENT})
+        try:
+            with urllib.request.urlopen(req, timeout=30):
+                return url, date
+        except urllib.error.HTTPError:
+            continue
+    return None
+
+
 def main() -> int:
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     manifest_path = DATA_DIR / "manifest.jsonl"
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+    # (name, url, filename, gzip the body before storing?)
     targets = []
     for name, meta in CRAWLER_DUMPS.items():
-        targets.append((name, meta["url"], "txt.gz", False))
+        targets.append((name, meta["url"], f"{day}.txt.gz", False))
     for name, meta in API_SOURCES.items():
-        targets.append((name, meta["url"], "json.gz", True))
+        targets.append((name, meta["url"], f"{day}.json.gz", True))
+    for name, meta in DATED_SOURCES.items():
+        resolved = resolve_dated(name, meta)
+        if resolved is None:
+            print(f"{name}: no new dated file available, skipping")
+            continue
+        url, date = resolved
+        targets.append((name, url, f"{date}.{meta['kind']}.gz", True))
 
     failures = 0
-    for name, url, ext, needs_gzip in targets:
+    for name, url, filename, needs_gzip in targets:
         outdir = DATA_DIR / name
-        outfile = outdir / f"{day}.{ext}"
+        outfile = outdir / filename
         if outfile.exists():
             print(f"{name}: {outfile.name} already exists, skipping")
             continue

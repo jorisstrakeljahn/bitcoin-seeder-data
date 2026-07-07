@@ -27,13 +27,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="dumps-$(date -u +%Y-%m)"
-          DAY="$(date -u +%F)"
           if ! gh release view "$TAG" > /dev/null 2>&1; then
             gh release create "$TAG" \
               --title "Crawler dumps $(date -u +%Y-%m)" \
               --notes "Daily crawler dump archive (see data/dumps/manifest.jsonl for checksums)."
           fi
-          for f in data/dumps/*/"$DAY".*; do
+          # The dump directories are gitignored, so on a fresh CI checkout
+          # every file present was downloaded by this run and gets uploaded.
+          for f in data/dumps/*/*.gz; do
             [ -e "$f" ] || continue
             src="$(basename "$(dirname "$f")")"
             asset="/tmp/${src}-$(basename "$f")"

@@ -65,8 +65,17 @@ Dump format (bitcoin-seeder `dnsseed.dump`): one node per line with address,
 good flag, lastSuccess timestamp, uptime over five windows (2h/8h/1d/7d/30d),
 block height, service flags, protocol version and user agent.
 
-Additionally, the Blockchair nodes API (`api.blockchair.com/bitcoin/nodes`)
-is archived daily the same way (`blockchair-YYYY-MM-DD.json.gz`).
+Additionally archived daily the same way:
+
+- **BitMEX Research crawler** (`bitnod.es`): the daily node CSV
+  (`https://bitnod.es/csv/bitcoin_nodes_YYYY-MM-DD.csv`, stored as
+  `bitmex-YYYY-MM-DD.csv.gz`). One row per known node with export_date,
+  IP, port, country, ISP, services, protocol version, user agent and
+  block height. The collector tries today's date and falls back up to
+  3 days; files are stored under the date in the URL.
+- **Blockchair nodes API** (`api.blockchair.com/bitcoin/nodes`, stored as
+  `blockchair-YYYY-MM-DD.json.gz`). Note: this endpoint only returns a
+  limited "recently active" subset (~300 nodes), not a full crawl.
 
 ## Known limitations
 
@@ -78,6 +87,11 @@ is archived daily the same way (`blockchair-YYYY-MM-DD.json.gz`).
 - Crawler dumps are refreshed by their operators on their own schedules;
   a daily download may fetch an identical or a many-hours-old file. The
   manifest SHA-256 makes identical fetches detectable.
+- `seed.bitcoin.wiz.biz` publishes no crawler dump (DNS responses only);
+  `wiz.biz/bitcoin/seed` is an HTML status page.
+- bitnodes.io (ayeowch/bitnodes) has been unreachable since ~June 2026
+  and is not collected. Historic archives exist at
+  https://github.com/asmap/sample-data/releases/tag/bitnodes.
 - Collection start: 2026-07-07. No backfill exists for earlier dates.
 
 ## Running manually
