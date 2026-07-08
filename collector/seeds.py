@@ -60,11 +60,12 @@ DNS_SEEDS = {
         "software": "achow101/dnsseedrs",
         "service_bits": ACHOW_BITS,
     },
-    # Community seeder, NOT in Bitcoin Core's vSeeds (operator unverified);
-    # collected because it publishes a matching public crawler dump.
+    # Community seeder, NOT in Bitcoin Core's vSeeds. Run by Will Clark
+    # (willcl-ark, Bitcoin Core contributor; SOA rname will.256k1.dev)
+    # on his fork of achow101/dnsseedrs.
     "seed.bitcoin.fish.foo": {
-        "operator": "fish.foo (community, non-Core)",
-        "software": "sipa/bitcoin-seeder (dump format match)",
+        "operator": "Will Clark (willcl-ark, non-Core)",
+        "software": "willcl-ark/dnsseedrs (achow101 fork)",
         "service_bits": COMMON_BITS,
     },
 }
@@ -74,6 +75,8 @@ DNS_SEEDS = {
 # services, version). These are the sources used by Bitcoin Core's
 # contrib/seeds/makeseeds.py for fixed-seed generation.
 CRAWLER_DUMPS = {
+    # Published dump frozen since 2025-11-22 (DNS seed itself stays
+    # fresh); still fetched in case it resumes.
     "sipa": {
         "url": "https://bitcoin.sipa.be/seeds.txt.gz",
         "operator": "Pieter Wuille (sipa)",
@@ -84,6 +87,7 @@ CRAWLER_DUMPS = {
         "operator": "Ava Chow (achow101)",
         "kind": "seeds.txt.gz",
     },
+    # Frozen since 2026-05-22; still fetched in case it resumes.
     "virtu": {
         "url": "https://21.ninja/seeds.txt.gz",
         "operator": "virtu",
@@ -91,14 +95,14 @@ CRAWLER_DUMPS = {
     },
     "fishfoo": {
         "url": "https://bitcoin.fish.foo/seeds.txt.gz",
-        "operator": "fish.foo (community, non-Core)",
+        "operator": "Will Clark (willcl-ark, non-Core)",
         "kind": "seeds.txt.gz",
     },
 }
 
 # Third-party crawler APIs (JSON responses, stored gzipped as delivered).
 # Note: Blockchair's nodes endpoint only returns a limited "recently
-# active" subset (~300 nodes), not a full crawl.
+# active" subset (about 300 nodes), not a full crawl.
 API_SOURCES = {
     "blockchair": {
         "url": "https://api.blockchair.com/bitcoin/nodes",
@@ -106,7 +110,7 @@ API_SOURCES = {
         "kind": "json",
     },
     # Revival of the ayeowch/bitnodes crawler (brunneis fork) that ran
-    # bitnodes.io until its demise; snapshots every ~24 min, we archive
+    # bitnodes.io until its demise; snapshots every 24 min or so, we archive
     # one per day. Compact node format (no per-node ASN/geo).
     "btcnodes": {
         "url": "https://btcnodes.io/api/v1/snapshots/latest/",
