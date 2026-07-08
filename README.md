@@ -26,24 +26,15 @@ Format: one JSON object per query, appended to `data/dns/YYYY-MM-DD.jsonl`
 Failed queries and NXDOMAIN responses are recorded as well — a seed being
 down or a subdomain being unsupported is itself a data point.
 
-Seeds collected (mirrors chainparams.cpp, checked 2026-07-07):
-
-| Seed | Operator | Software |
-|---|---|---|
-| seed.bitcoin.sipa.be | Pieter Wuille | sipa/bitcoin-seeder |
-| dnsseed.bluematt.me | Matt Corallo | TheBlueMatt/dnsseed |
-| seed.bitcoin.jonasschnelli.ch | Jonas Schnelli | sipa fork |
-| seed.btc.petertodd.net | Peter Todd | sipa fork |
-| seed.bitcoin.sprovoost.nl | Sjors Provoost | sipa fork |
-| dnsseed.emzy.de | Stephan Oeste | sipa fork |
-| seed.bitcoin.wiz.biz | Jason Maurice | wiz/dnsseed-rust |
-| seed.mainnet.achownodes.xyz | Ava Chow | achow101/dnsseedrs |
+Seeds collected: the eight mainnet seeds from chainparams.cpp plus the
+community seeder `seed.bitcoin.fish.foo` (not in Core's vSeeds). Full
+table with operators and software: [SOURCES.md](SOURCES.md).
 
 ### Layer B — Full crawler dumps (`data/dumps/`)
 
-The complete crawler view published by three seeder operators — the same
-sources Bitcoin Core's `contrib/seeds/makeseeds.py` uses for fixed-seed
-generation. Downloaded once per day (cron `43 5 * * *`).
+The complete crawler view published by seeder/crawler operators —
+including the three sources Bitcoin Core's `contrib/seeds/makeseeds.py`
+uses for fixed-seed generation. Downloaded once per day (cron `43 5 * * *`).
 
 The dumps are large (~40 MB/day total), so they are **not committed to
 git**. The workflow uploads them unmodified as assets to a monthly GitHub
@@ -53,26 +44,29 @@ SHA-256 and HTTP status for every download (including failures), so each
 release asset can be verified against the manifest. Manual runs keep the
 files locally under `data/dumps/<source>/` (gitignored).
 
-Sources:
+Sources (full table with descriptions: [SOURCES.md](SOURCES.md)):
 
-| Source | URL |
-|---|---|
-| sipa | https://bitcoin.sipa.be/seeds.txt.gz |
-| achow101 | https://mainnet.achownodes.xyz/seeds.txt.gz |
-| virtu | https://21.ninja/seeds.txt.gz |
-
-Dump format (bitcoin-seeder `dnsseed.dump`): one node per line with address,
-good flag, lastSuccess timestamp, uptime over five windows (2h/8h/1d/7d/30d),
-block height, service flags, protocol version and user agent.
-
-Additionally archived daily the same way:
-
+- **seeds.txt.gz dumps** from sipa, achow101, virtu (21.ninja) and the
+  community seeder fish.foo. Dump format (bitcoin-seeder `dnsseed.dump`):
+  one node per line with address, good flag, lastSuccess timestamp,
+  uptime over five windows (2h/8h/1d/7d/30d), block height, service
+  flags, protocol version and user agent.
 - **BitMEX Research crawler** (`bitnod.es`): the daily node CSV
   (`https://bitnod.es/csv/bitcoin_nodes_YYYY-MM-DD.csv`, stored as
   `bitmex-YYYY-MM-DD.csv.gz`). One row per known node with export_date,
   IP, port, country, ISP, services, protocol version, user agent and
   block height. The collector tries today's date and falls back up to
   3 days; files are stored under the date in the URL.
+- **btcnodes.io** (brunneis' revival of the ayeowch/bitnodes crawler):
+  the latest full snapshot from `api/v1/snapshots/latest/` (~750 KB
+  gzipped, includes Tor/I2P/CJDNS nodes). One snapshot per day; a
+  one-time backfill archived one noon snapshot per day back to
+  2026-05-10 (the crawler's restart).
+- **KIT DSN dossier** (`dsn.kastel.kit.edu/bitcoin/snapshots/`): the
+  newest daily research-crawl dossier (~520 KB gzipped, per-node
+  whois/ASN annotations), resolved by scraping the directory index.
+  KIT keeps its full history (back to 2015-07) online, so missed days
+  can be backfilled at any time.
 - **Blockchair nodes API** (`api.blockchair.com/bitcoin/nodes`, stored as
   `blockchair-YYYY-MM-DD.json.gz`). Note: this endpoint only returns a
   limited "recently active" subset (~300 nodes), not a full crawl.
@@ -91,8 +85,16 @@ Additionally archived daily the same way:
   `wiz.biz/bitcoin/seed` is an HTML status page.
 - bitnodes.io (ayeowch/bitnodes) has been unreachable since ~June 2026
   and is not collected. Historic archives exist at
-  https://github.com/asmap/sample-data/releases/tag/bitnodes.
-- Collection start: 2026-07-07. No backfill exists for earlier dates.
+  https://github.com/asmap/sample-data/releases/tag/bitnodes; its
+  crawler lives on as btcnodes.io (collected, see above).
+- `seed.bitcoin.fish.foo` / `bitcoin.fish.foo` is a community source
+  whose operator is unverified; treat it as an independent-but-unvetted
+  vantage point, not as ground truth.
+- The KIT resolver only fetches the newest dossier per run; a skipped
+  day is not retried automatically (KIT's index keeps the full history,
+  so manual backfill is always possible).
+- Collection start: 2026-07-07 (btcnodes backfilled to 2026-05-10).
+  No other backfill exists for earlier dates.
 
 ## Running manually
 

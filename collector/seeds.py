@@ -60,6 +60,13 @@ DNS_SEEDS = {
         "software": "achow101/dnsseedrs",
         "service_bits": ACHOW_BITS,
     },
+    # Community seeder, NOT in Bitcoin Core's vSeeds (operator unverified);
+    # collected because it publishes a matching public crawler dump.
+    "seed.bitcoin.fish.foo": {
+        "operator": "fish.foo (community, non-Core)",
+        "software": "sipa/bitcoin-seeder (dump format match)",
+        "service_bits": COMMON_BITS,
+    },
 }
 
 # Full crawler dumps published by seeder operators (bitcoin-seeder dump
@@ -82,6 +89,11 @@ CRAWLER_DUMPS = {
         "operator": "virtu",
         "kind": "seeds.txt.gz",
     },
+    "fishfoo": {
+        "url": "https://bitcoin.fish.foo/seeds.txt.gz",
+        "operator": "fish.foo (community, non-Core)",
+        "kind": "seeds.txt.gz",
+    },
 }
 
 # Third-party crawler APIs (JSON responses, stored gzipped as delivered).
@@ -91,6 +103,14 @@ API_SOURCES = {
     "blockchair": {
         "url": "https://api.blockchair.com/bitcoin/nodes",
         "operator": "Blockchair",
+        "kind": "json",
+    },
+    # Revival of the ayeowch/bitnodes crawler (brunneis fork) that ran
+    # bitnodes.io until its demise; snapshots every ~24 min, we archive
+    # one per day. Compact node format (no per-node ASN/geo).
+    "btcnodes": {
+        "url": "https://btcnodes.io/api/v1/snapshots/latest/",
+        "operator": "Rodrigo Martinez (brunneis, btcnodes.io)",
         "kind": "json",
     },
 }
@@ -103,5 +123,19 @@ DATED_SOURCES = {
         "operator": "BitMEX Research (bitnod.es)",
         "kind": "csv",
         "lookback_days": 3,
+    },
+}
+
+# Sources publishing dated files behind an HTML directory index whose
+# exact filenames carry an unpredictable timestamp. The collector scrapes
+# the index, picks the newest match, and archives it under its date.
+# KIT's full history (daily dossiers back to 2015-07) stays available on
+# the index, so only the newest file is fetched per run.
+INDEXED_SOURCES = {
+    "kit": {
+        "index_url": "https://www.dsn.kastel.kit.edu/bitcoin/snapshots/",
+        "file_pattern": r"(\d{8})_\d{6}_dossier\.json",
+        "operator": "KIT DSN group (dsn.kastel.kit.edu)",
+        "kind": "json",
     },
 }

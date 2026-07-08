@@ -1,7 +1,9 @@
 """Archive the full crawler dumps published by Bitcoin seeder operators.
 
-Downloads each ``seeds.txt.gz`` crawler dump and the Blockchair nodes API
-response, stores them unmodified (raw preservation) under
+Downloads each ``seeds.txt.gz`` crawler dump, the JSON API snapshots
+(Blockchair, btcnodes.io), the dated bitnod.es CSV, and the newest KIT
+dossier from its directory index; stores them unmodified (raw
+preservation, JSON/CSV gzipped) under
 ``data/dumps/<source>/YYYY-MM-DD.<ext>`` (UTC date), and appends a
 manifest line with URL, size and SHA-256 for later citation/integrity.
 
@@ -14,13 +16,14 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from seeds import API_SOURCES, CRAWLER_DUMPS, DATED_SOURCES
+from seeds import API_SOURCES, CRAWLER_DUMPS, DATED_SOURCES, INDEXED_SOURCES
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "dumps"
 USER_AGENT = "bitcoin-seeder-data-collector (research archive)"
@@ -51,6 +54,24 @@ def resolve_dated(name: str, meta: dict) -> tuple[str, str] | None:
     return None
 
 
+def resolve_indexed(name: str, meta: dict) -> tuple[str, str] | None:
+    """Scrape the directory index, return (url, date) of the newest file.
+
+    The pattern's first group must capture the file's YYYYMMDD date. Files
+    already archived for that date are skipped like the dated sources.
+    """
+    _, body = fetch(meta["index_url"])
+    matches = list(re.finditer(meta["file_pattern"],
+                               body.decode("utf-8", "replace")))
+    if not matches:
+        return None
+    newest = max(matches, key=lambda m: m.group(1))
+    date = datetime.strptime(newest.group(1), "%Y%m%d").date().isoformat()
+    if (DATA_DIR / name / f"{date}.{meta['kind']}.gz").exists():
+        return None
+    return meta["index_url"] + newest.group(0), date
+
+
 def main() -> int:
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     manifest_path = DATA_DIR / "manifest.jsonl"
@@ -66,6 +87,17 @@ def main() -> int:
         resolved = resolve_dated(name, meta)
         if resolved is None:
             print(f"{name}: no new dated file available, skipping")
+            continue
+        url, date = resolved
+        targets.append((name, url, f"{date}.{meta['kind']}.gz", True))
+    for name, meta in INDEXED_SOURCES.items():
+        try:
+            resolved = resolve_indexed(name, meta)
+        except Exception as exc:
+            print(f"{name}: index scrape failed ({exc})", file=sys.stderr)
+            continue
+        if resolved is None:
+            print(f"{name}: no new indexed file available, skipping")
             continue
         url, date = resolved
         targets.append((name, url, f"{date}.{meta['kind']}.gz", True))
