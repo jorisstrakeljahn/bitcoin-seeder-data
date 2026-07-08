@@ -118,12 +118,15 @@ API_SOURCES = {
         "kind": "json",
     },
     # Daily per-seed quality metrics (advertised/reachable/stale/pristine/
-    # duplicate) back to Oct 2022. Each response carries the full history,
-    # so a daily fetch self-heals gaps. Sibling endpoints (dns/latest,
+    # duplicate). The API only carries Octavio Lucca's own measurements
+    # (since 2026-05-17); each response contains that full span, so a
+    # daily fetch self-heals gaps. The older virtu series (2022-10 to
+    # 2025-11, static CSVs under demo-data/) is archived one-time in
+    # data/octavio-historic/. Sibling endpoints (dns/latest,
     # hardcoded/history, decay/history) are documented in SOURCES.md.
     "octavio": {
         "url": "https://octavio.xyz/projects/dns-monitoring/api/dns/timeseries",
-        "operator": "octavio.xyz DNS seed monitor",
+        "operator": "Octavio Lucca (octavio.xyz DNS seed monitor)",
         "kind": "json",
     },
 }

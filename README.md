@@ -73,6 +73,10 @@ Sources (full table with descriptions: [SOURCES.md](SOURCES.md)):
 - **Blockchair nodes API** (`api.blockchair.com/bitcoin/nodes`, stored as
   `blockchair-YYYY-MM-DD.json.gz`). Note: this endpoint only returns a
   limited "recently active" subset (about 300 nodes), not a full crawl.
+- **octavio.xyz DNS seed monitor**: daily per-seed quality metrics via
+  `api/dns/timeseries` (Octavio Lucca's own measurements, since
+  2026-05-17). The older virtu series (2022-10 to 2025-11) is archived
+  one-time in `data/octavio-historic/` (see its README for provenance).
 
 ## Known limitations
 
