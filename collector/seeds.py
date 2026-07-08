@@ -113,6 +113,15 @@ API_SOURCES = {
         "operator": "Rodrigo Martinez (brunneis, btcnodes.io)",
         "kind": "json",
     },
+    # Daily per-seed quality metrics (advertised/reachable/stale/pristine/
+    # duplicate) back to Oct 2022. Each response carries the full history,
+    # so a daily fetch self-heals gaps. Sibling endpoints (dns/latest,
+    # hardcoded/history, decay/history) are documented in SOURCES.md.
+    "octavio": {
+        "url": "https://octavio.xyz/projects/dns-monitoring/api/dns/timeseries",
+        "operator": "octavio.xyz DNS seed monitor",
+        "kind": "json",
+    },
 }
 
 # Sources publishing one dated file per day. The collector tries today's
