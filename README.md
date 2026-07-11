@@ -1,118 +1,38 @@
 # bitcoin-seeder-data
 
-Longitudinal archive of Bitcoin DNS seeder data, collected automatically via
-GitHub Actions. Foundation for a comparative analysis of the active Bitcoin
-DNS seeders and network crawlers (what data they serve, how they differ, and
-which source is best suited as ground truth for ASMap validation).
+A longitudinal archive of Bitcoin DNS seeder and network crawler data, collected automatically via GitHub Actions. It is the foundation for a comparative analysis of the sources the network relies on for bootstrapping: what each seeder and crawler actually serves, how they differ, and which one deserves to be called ground truth.
 
 ## What is collected
 
-### Layer A — DNS responses (`data/dns/`)
+**Layer A: DNS responses** (`data/dns/`, every 6 hours). What a bootstrapping node actually sees. Each mainnet seed from Bitcoin Core's `chainparams.cpp` plus one community seeder is queried for A and AAAA records on all supported service-bit subdomains, three times per run. One JSON line per query, including failures; a dead seed is a data point, not an error.
 
-What a bootstrapping node actually sees. Every 6 hours (cron `17 */6 * * *`),
-each mainnet DNS seed from Bitcoin Core's `src/kernel/chainparams.cpp` is
-queried via `dig` for A and AAAA records — the plain hostname plus the
-service-bit subdomains the seed supports (`x1`, `x5`, `x9`, `xd`, ...). Since
-each response is a random subset (about 25 addresses) of the seeder's pool,
-every hostname/qtype pair is queried 3 times per run.
+**Layer B: crawler dumps** (daily). The full network view published by seeder and crawler operators, including all three sources Core's `makeseeds.py` uses for fixed-seed generation. The files are large, so they are uploaded unmodified to a monthly GitHub release (`dumps-YYYY-MM`) instead of git. `data/dumps/manifest.jsonl` records URL, size and SHA-256 for every download, so each asset stays verifiable.
 
-Format: one JSON object per query, appended to `data/dns/YYYY-MM-DD.jsonl`
-(UTC):
+Current sources: the seeds.txt dumps of sipa, achow101, virtu and fish.foo, the BitMEX node CSV, btcnodes.io snapshots, KIT DSN research dossiers, the Blockchair nodes API and the octavio.xyz seed monitor. Full table with operators, formats and caveats: [SOURCES.md](SOURCES.md).
 
-```json
-{"seed":"seed.bitcoin.sipa.be","ts":"2026-07-07T16:00:12+00:00","hostname":"x9.seed.bitcoin.sipa.be","qtype":"A","status":"NOERROR","ttl":60,"records":["203.0.113.5","..."]}
+## Analysis
+
+`analysis/compare_sources.py` normalizes every source to a comparable view and rebuilds all tables and charts in `analysis/output/` from the raw archives on each run, so everything grows automatically as more days accumulate. It covers population sizes per network, pairwise IP overlap, ASN concentration (HHI, CR5) from the KIT data, and a DNS seed quality view that cross-checks the addresses each seed serves against independent crawler and reachability measurements.
+
+```
+python3 -m venv .venv && .venv/bin/pip install -r analysis/requirements.txt
+.venv/bin/python analysis/compare_sources.py --fetch
 ```
 
-Failed queries and NXDOMAIN responses are recorded as well — a seed being
-down or a subdomain being unsupported is itself a data point.
+`--fetch` pulls missing release assets via the GitHub CLI, so a fresh checkout reproduces the full analysis. Results land in `analysis/output/summary.md`.
 
-Seeds collected: the eight mainnet seeds from chainparams.cpp plus the
-community seeder `seed.bitcoin.fish.foo` (Will Clark, not in Core's
-vSeeds). Full table with operators and software: [SOURCES.md](SOURCES.md).
-
-### Layer B — Full crawler dumps (`data/dumps/`)
-
-The complete crawler view published by seeder/crawler operators —
-including the three sources Bitcoin Core's `contrib/seeds/makeseeds.py`
-uses for fixed-seed generation. Downloaded once per day (cron `43 5 * * *`).
-
-The dumps are large (about 40 MB/day total), so they are **not committed to
-git**. The workflow uploads them unmodified as assets to a monthly GitHub
-release (`dumps-YYYY-MM`, asset name `<source>-YYYY-MM-DD.txt.gz`). Only
-`data/dumps/manifest.jsonl` is tracked in git; it records URL, size,
-SHA-256 and HTTP status for every download (including failures), so each
-release asset can be verified against the manifest. Manual runs keep the
-files locally under `data/dumps/<source>/` (gitignored).
-
-Sources (full table with descriptions: [SOURCES.md](SOURCES.md)):
-
-- **seeds.txt.gz dumps** from sipa, achow101, virtu (21.ninja) and the
-  community seeder fish.foo (run by Will Clark). Dump format
-  (bitcoin-seeder `dnsseed.dump`): one node per line with address, good
-  flag, lastSuccess timestamp, uptime over five windows (2h/8h/1d/7d/30d),
-  block height, service flags, protocol version and user agent. Note:
-  the sipa dump is frozen upstream since 2025-11-22 and the virtu dump
-  since 2026-05-22 (see SOURCES.md); both are still fetched in case
-  publishing resumes.
-- **BitMEX Research crawler** (`bitnod.es`): the daily node CSV
-  (`https://bitnod.es/csv/bitcoin_nodes_YYYY-MM-DD.csv`, stored as
-  `bitmex-YYYY-MM-DD.csv.gz`). One row per known node with export_date,
-  IP, port, country, ISP, services, protocol version, user agent and
-  block height. The collector tries today's date and falls back up to
-  3 days; files are stored under the date in the URL.
-- **btcnodes.io** (brunneis' revival of the ayeowch/bitnodes crawler):
-  the latest full snapshot from `api/v1/snapshots/latest/` (about 750 KB
-  gzipped, includes Tor/I2P/CJDNS nodes). One snapshot per day; a
-  one-time backfill archived one noon snapshot per day back to
-  2026-05-10 (the crawler's restart).
-- **KIT DSN dossier** (`dsn.kastel.kit.edu/bitcoin/snapshots/`): the
-  newest daily research-crawl dossier (about 520 KB gzipped, per-node
-  whois/ASN annotations), resolved by scraping the directory index.
-  KIT keeps its full history (back to 2015-07) online, so missed days
-  can be backfilled at any time.
-- **Blockchair nodes API** (`api.blockchair.com/bitcoin/nodes`, stored as
-  `blockchair-YYYY-MM-DD.json.gz`). Note: this endpoint only returns a
-  limited "recently active" subset (about 300 nodes), not a full crawl.
-- **octavio.xyz DNS seed monitor**: daily per-seed quality metrics via
-  `api/dns/timeseries` (Octavio Lucca's own measurements, since
-  2026-05-17). The older virtu series (2022-10 to 2025-11) is archived
-  one-time in `data/octavio-historic/` (see its README for provenance).
-
-## Known limitations
-
-- DNS responses depend on the resolver location of the GitHub Actions
-  runner (US datacenters); anycast or GeoDNS behavior of individual seeds
-  is not distinguishable from a single vantage point.
-- The 6-hour sampling of DNS responses under-samples the seeder pools;
-  counts of unique addresses per seed are lower bounds, not pool sizes.
-- Crawler dumps are refreshed by their operators on their own schedules;
-  a daily download may fetch an identical or a many-hours-old file. The
-  manifest SHA-256 makes identical fetches detectable.
-- `seed.bitcoin.wiz.biz` publishes no crawler dump (DNS responses only);
-  `wiz.biz/bitcoin/seed` is an HTML status page.
-- The sipa dump (`bitcoin.sipa.be/seeds.txt.gz`) is frozen upstream
-  since 2025-11-22 and the virtu dump (`21.ninja/seeds.txt.gz`) since
-  2026-05-22. Both DNS seeds themselves remain fresh; only the published
-  dumps stopped updating.
-- bitnodes.io (ayeowch/bitnodes) has been unreachable since around May
-  2026 and is not collected. Historic archives exist at
-  https://github.com/asmap/sample-data/releases/tag/bitnodes; its
-  crawler lives on as btcnodes.io (collected, see above).
-- `seed.bitcoin.fish.foo` / `bitcoin.fish.foo` is run by Will Clark
-  (willcl-ark, Bitcoin Core contributor) but is not in Core's vSeeds;
-  an independent vantage point rather than a Core-vetted seed.
-- The KIT resolver only fetches the newest dossier per run; a skipped
-  day is not retried automatically (KIT's index keeps the full history,
-  so manual backfill is always possible).
-- Collection start: 2026-07-07 (btcnodes backfilled to 2026-05-10).
-  No other backfill exists for earlier dates.
-
-## Running manually
+## Collecting manually
 
 ```
 python3 collector/collect_dns.py    # requires dig
 python3 collector/collect_dumps.py
 ```
 
-Both scripts are Python stdlib only, idempotent per day, and append-only.
-Source configuration (seed list, URLs) lives in `collector/seeds.py`.
+Both collectors are Python stdlib only, idempotent per day and append-only. Source configuration lives in `collector/seeds.py`.
+
+## Caveats
+
+- Collection started 2026-07-07; btcnodes is backfilled to 2026-05-10 and KIT keeps its own history online back to 2015.
+- DNS responses are sampled from a single vantage point (GitHub Actions runners in US datacenters), so per-seed address counts are lower bounds and GeoDNS effects are invisible.
+- Operators refresh their dumps on their own schedules; identical fetches are detectable via the manifest checksums.
+- The sipa and virtu dumps are frozen upstream (details in SOURCES.md); both DNS seeds themselves remain live.

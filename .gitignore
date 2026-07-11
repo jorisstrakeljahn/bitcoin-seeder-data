@@ -2,3 +2,8 @@
 # assets by the workflow, not committed. Only the manifest is tracked.
 data/dumps/*/
 __pycache__/
+.venv/
+# Analysis outputs are regenerated from the raw archives on every run;
+# the release cache mirrors what is already on GitHub.
+analysis/output/
+analysis/.release-cache/
