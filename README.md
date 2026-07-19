@@ -21,6 +21,29 @@ python3 -m venv .venv && .venv/bin/pip install -r analysis/requirements.txt
 
 `--fetch` pulls missing release assets via the GitHub CLI, so a fresh checkout reproduces the full analysis. Results land in `analysis/output/summary.md`.
 
+`analysis/addrman_history.py` reads every daily `hal` and `len` snapshot from
+the git history of
+[bitcoin-data/getrawaddrman](https://github.com/bitcoin-data/getrawaddrman)
+(maintained by 0xB10C) and computes new-table timestamp freshness, daily
+endpoint turnover and cohort survival from February 2026 onward. These
+metrics come from the snapshots alone; the snapshots contain no connection
+outcomes, so none of this is a reachability measurement. Keep that repository
+as a sibling checkout and run:
+
+```
+gh repo clone bitcoin-data/getrawaddrman ../getrawaddrman
+.venv/bin/python analysis/addrman_history.py
+```
+
+`analysis/seeder_never_version.py` reports how many endpoints in the latest
+fish.foo and achow101 dumps never completed a VERSION handshake. Both run
+dnsseedrs, which deletes never-successful rows after more than 10 failed
+attempts, so this is a rolling window over recently gossiped endpoints, not a
+lifetime count.
+
+Both scripts back [this bnoc.xyz post](https://bnoc.xyz/t/unreachable-addresses-in-bitcoin-getaddr-responses/155/2)
+on how the 2026 address flood shows up in addrman.
+
 ## Collecting manually
 
 ```

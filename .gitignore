@@ -7,3 +7,5 @@ __pycache__/
 # the release cache mirrors what is already on GitHub.
 analysis/output/
 analysis/.release-cache/
+.firecrawl/
+.DS_Store
