@@ -39,7 +39,7 @@ OUT = REPO / "analysis" / "output" / "network_tab_eval.md"
 
 SAMPLE_SIZES = (100, 250, 500, 1000, 2000, 4000)
 SAMPLE_DRAWS = 20
-DNS_WINDOWS_DAYS = (1, 3, 7)
+DNS_WINDOWS_DAYS = (1, 3, 7, 14)
 BITMEX_FRESH_DAYS = 1
 
 
@@ -186,11 +186,12 @@ def main() -> int:
     seeds = sorted({s for d in dns_days.values() for s in d})
 
     def accumulate(window_days, wanted=None) -> set[str]:
+        """Union of clearnet DNS A/AAAA hosts over the window (ports N/A)."""
         out: set[str] = set()
         for d in window_days:
             for s, recs in dns_days[d].items():
                 if wanted is None or s in wanted:
-                    out |= recs
+                    out |= {r for r in recs if is_clearnet(r)}
         return out
 
     add("\n## 1. DNS seeder responses, accumulated, vs. full crawls\n")
@@ -278,7 +279,7 @@ def main() -> int:
         "across snapshot sizes**.\n")
 
     # 3. same-code divergence -------------------------------------------
-    add("\n## 3. Same codebase, different data\n")
+    add("\n## 3. Pairwise overlap (same software line)\n")
 
     bm_rows = load_bitmex(day)
     newest = max(r["export_date"] for r in bm_rows)
@@ -322,10 +323,15 @@ def main() -> int:
          ["btcnodes-only", len(only_btc)],
          ["btcnodes hosts present in bitmex cumulative CSV (clearnet)",
           f"{len(btc_hosts & {r['ip_address'].lower() for r in bm_rows if _is_clearnet_host(r['ip_address'])}) / len(btc_hosts):.0%}"]]))
-    add("\nThe divergence is dominated by snapshot semantics (single "
-        "validated round vs 24h last-seen window) **plus** genuinely "
-        "different crawler reach: most bitmex-only hosts never appear "
-        "in a whole week of btcnodes snapshots.\n")
+    never_in_week = len(only_bm - union7)
+    add("\nPart of the gap is snapshot semantics (single validated round "
+        f"vs 24h last-seen window): {len(only_bm & union7)} of "
+        f"{len(only_bm)} bitmex-only hosts "
+        f"({len(only_bm & union7) / len(only_bm):.0%}) still appear in "
+        f"another btcnodes snapshot from the last {len(recent)} archived "
+        f"days. {never_in_week} "
+        f"({never_in_week / len(only_bm):.0%}) do not appear in that "
+        "week at all.\n")
 
     ach = load_seeds_good("achow101", day)
     ff = load_seeds_good("fishfoo", day)
@@ -337,9 +343,8 @@ def main() -> int:
          ["Jaccard", f"{len(ach & ff) / len(ach | ff):.2f}"],
          ["achow101-only", len(ach - ff)],
          ["fish.foo-only", len(ff - ach)]]))
-    add("\nTwo instances of the *same* software still disagree on "
-        "roughly a third of the union: vantage point, uptime history "
-        "and probe timing dominate over the codebase.\n")
+    add("\nAbout a third of the union differs (vantage, uptime history, "
+        "probe timing).\n")
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text("\n".join(parts), encoding="utf-8")

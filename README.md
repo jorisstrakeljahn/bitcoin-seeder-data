@@ -21,6 +21,8 @@ python3 -m venv .venv && .venv/bin/pip install -r analysis/requirements.txt
 
 `--fetch` pulls missing release assets via the GitHub CLI, so a fresh checkout reproduces the full analysis. Results land in `analysis/output/summary.md`.
 
+`analysis/network_tab_eval.py` answers three follow-up questions from the same archives, all clearnet-only (IPv4+IPv6): whether DNS seeder answers pooled over 1/3/7/14-day windows can substitute for a full crawl (precision/recall against a btcnodes snapshot), how each netgroup metric behaves under subsampling, and how far sources sharing a codebase diverge (bitnod.es vs btcnodes.io, achow101 vs fish.foo). Results land in `analysis/output/network_tab_eval.md`; `--day YYYY-MM-DD` pins the reference day for reproducibility.
+
 `analysis/addrman_history.py` reads every daily `hal` and `len` snapshot from
 the git history of
 [bitcoin-data/getrawaddrman](https://github.com/bitcoin-data/getrawaddrman)
