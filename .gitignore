@@ -9,3 +9,4 @@ analysis/output/
 analysis/.release-cache/
 .firecrawl/
 .DS_Store
+data/external/

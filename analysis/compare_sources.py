@@ -21,8 +21,9 @@ are not comparable. The per-source "reachable" definitions used here:
   BITMEX_FRESH_DAYS of the newest export date count as reachable.
 - KIT dossier: keyed by anonymized hashes, no IP addresses, so KIT can
   never join IP-overlap comparisons. It carries whois/ASN on nearly all
-  nodes and therefore powers the ASN view. ``lastConnect`` spreads over
-  months, so counts are reported per freshness window.
+  nodes and therefore powers the ASN view. The primary clearnet count is
+  the full dossier (matches the KIT website unique-IP scale); chart also
+  shows ``lastConnect`` ≤1d / ≤7d windows as stricter subsets.
 - Blockchair: a small "recently active" subset, kept as a cross-check
   and excluded from coverage denominators.
 
@@ -69,6 +70,13 @@ SUBSET_SOURCES = frozenset({"blockchair"})
 #: of the newest export date in the file.
 BITMEX_FRESH_DAYS = 1
 
+#: bitnod.es published weekly files before this date and daily ones
+#: after. Export dates inside the files are per-day either way, but the
+#: reachable counts drop sharply around the switch (22k -> 12k while
+#: btcnodes stayed flat), so the two eras should not be read as one
+#: continuous series.
+BITMEX_DAILY_SINCE = "2026-06-26"
+
 #: Freshness windows (days) for KIT lastConnect counts. The 7 day
 #: window doubles as KIT's "reachable" population.
 KIT_WINDOWS = (1, 7, 30)
@@ -76,6 +84,66 @@ KIT_REACHABLE_WINDOW = 7
 
 NETWORKS = ("ipv4", "ipv6", "onion", "i2p", "cjdns")
 CLEARNET = ("ipv4", "ipv6")
+
+#: Human-readable labels; internal keys stay short for file paths/CSVs.
+DISPLAY_NAMES = {
+    "sipa": "sipa",
+    "achow101": "achownodes.xyz",
+    "virtu": "virtu (21.ninja)",
+    "fishfoo": "fish.foo",
+    "btcnodes": "btcnodes.io",
+    "bitmex": "bitnod.es (BitMEX)",
+    "kit": "KIT DSN",
+    "blockchair": "Blockchair",
+}
+
+#: One fixed color per entity, stable across every chart. Seeds run by a
+#: dump operator share that operator's color (same entity, two views).
+SOURCE_COLORS = {
+    "sipa": "#1f77b4",       # blue
+    "achow101": "#ff7f0e",   # orange
+    "fishfoo": "#2ca02c",    # green
+    "bitmex": "#9467bd",     # purple
+    "btcnodes": "#d62728",   # red
+    "kit": "#8c564b",        # brown
+    "virtu": "#7f7f7f",      # gray (frozen)
+    "blockchair": "#c49c94", # light brown (subset, rarely charted)
+}
+
+SEED_COLORS = {
+    "sipa.be": SOURCE_COLORS["sipa"],
+    "achownodes.xyz": SOURCE_COLORS["achow101"],
+    "fish.foo": SOURCE_COLORS["fishfoo"],
+    "bluematt.me": "#17becf",        # cyan
+    "emzy.de": "#e377c2",            # pink
+    "jonasschnelli.ch": "#bcbd22",   # olive
+    "petertodd.net": "#6a3d9a",      # violet
+    "sprovoost.nl": "#b15928",       # rust
+    "wiz.biz": "#e6ab02",            # mustard
+    # ex-Core seeds, only present in the octavio monitor data
+    "dashjr-list-of-p2p-nodes.us": "#66a61e",  # moss
+    "bitcoinstats.com": "#a6761d",             # ochre
+}
+
+NETWORK_COLORS = {
+    "ipv4": "#3182bd",
+    "ipv6": "#9ecae1",
+    "onion": "#756bb1",
+    "i2p": "#bcbddc",
+    "cjdns": "#bdbdbd",
+}
+
+
+def display(source: str) -> str:
+    return DISPLAY_NAMES.get(source, source)
+
+
+def source_color(source: str) -> str:
+    return SOURCE_COLORS.get(source, "#333333")
+
+
+def seed_color(seed: str) -> str:
+    return SEED_COLORS.get(short_seed_name(seed), "#333333")
 
 #: Reference crawler for the seed coverage time series: the only source
 #: with a true daily snapshot and history back to 2026-05-10.
@@ -97,6 +165,13 @@ class SourceDay:
 
     @property
     def clearnet_reachable(self) -> int:
+        """Unique clearnet hosts when available, else ipv4+ipv6 row count.
+
+        Prefer ``hosts`` so dual-port endpoints on the same IP count once
+        (ASmap-relevant). KIT has no IPs, so it falls back to the counter.
+        """
+        if self.hosts:
+            return len(self.hosts)
         return sum(self.reachable.get(net, 0) for net in CLEARNET)
 
 
@@ -116,23 +191,31 @@ class SeedDay:
 
 # ------------------------------------------------------------------- parsing
 
-def classify_network(addr: str) -> str:
-    """Classify an ``address:port`` string into a network type."""
-    if ".onion:" in addr:
-        return "onion"
-    if ".b32.i2p:" in addr:
-        return "i2p"
-    if addr.startswith("["):
-        # CJDNS addresses come from fc00::/8 and look like IPv6 literals.
-        return "cjdns" if addr[1:3].lower() == "fc" else "ipv6"
-    return "ipv4"
-
-
 def host_of(addr: str) -> str:
     """Return the lowercased host part of an ``address:port`` string."""
     if addr.startswith("["):
         return addr[1 : addr.index("]")].lower()
+    # Bare IPv6 has many colons; IPv4/onion use a single ``:port``.
+    if addr.count(":") > 1:
+        return addr.lower()
     return addr.rsplit(":", 1)[0].lower()
+
+
+def classify_network(addr: str) -> str:
+    """Classify an ``address:port`` (or bare host) into a network type.
+
+    Clearnet for ASmap / cross-source charts is only ``ipv4`` + ``ipv6``.
+    Onion, I2P and CJDNS are counted separately and never enter ``hosts``.
+    """
+    lower = addr.lower()
+    if ".onion" in lower:
+        return "onion"
+    if ".b32.i2p" in lower or ".i2p" in lower:
+        return "i2p"
+    host = host_of(addr)
+    if ":" in host:
+        return "cjdns" if host.startswith("fc") else "ipv6"
+    return "ipv4"
 
 
 def parse_seeds_txt(path: Path) -> SourceDay:
@@ -174,7 +257,11 @@ def parse_btcnodes(path: Path) -> SourceDay:
 
 
 def parse_bitmex(path: Path) -> SourceDay:
-    """bitnod.es CSV: cumulative last-seen list, needs a freshness cut."""
+    """bitnod.es CSV: cumulative last-seen list, needs a freshness cut.
+
+    The CSV mixes clearnet and onion (and rare i2p). Only clearnet hosts
+    enter ``hosts`` / clearnet charts; onion must not be counted as IPv4.
+    """
     with gzip.open(path, "rt", encoding="utf-8", errors="replace") as fh:
         rows = list(csv.DictReader(fh))
     newest = max(row["export_date"] for row in rows)
@@ -185,13 +272,15 @@ def parse_bitmex(path: Path) -> SourceDay:
     hosts: set[str] = set()
     for row in rows:
         host = row["ip_address"].lower()
-        net = "ipv6" if ":" in host else "ipv4"
+        net = classify_network(host)
         total[net] += 1
         if row["export_date"] >= cutoff:
             fresh[net] += 1
-            hosts.add(host)
+            if net in CLEARNET:
+                hosts.add(host)
     return SourceDay(total=total, reachable=fresh, hosts=frozenset(hosts),
-                     note=f"reachable = last seen on or after {cutoff}")
+                     note=f"reachable = last seen on or after {cutoff}; "
+                          f"clearnet charts use ipv4+ipv6 only")
 
 
 def parse_blockchair(path: Path) -> SourceDay:
@@ -201,13 +290,13 @@ def parse_blockchair(path: Path) -> SourceDay:
     counts: Counter = Counter()
     hosts: set[str] = set()
     for addr in payload.get("data", {}).get("nodes", {}):
-        host = host_of(addr)
-        net = "ipv6" if ":" in host else "ipv4"
+        net = classify_network(addr)
         counts[net] += 1
-        hosts.add(host)
+        if net in CLEARNET:
+            hosts.add(host_of(addr))
     return SourceDay(total=counts, reachable=counts,
                      hosts=frozenset(hosts),
-                     note="recently-active subset, cross-check only")
+                     note="recently-active clearnet subset, cross-check only")
 
 
 def parse_kit(path: Path) -> SourceDay:
@@ -230,10 +319,14 @@ def parse_kit(path: Path) -> SourceDay:
         asn = (node.get("whois") or {}).get("asn")
         if asn:
             asns[asn] += 1
+    # Reachable = full dossier clearnet size. That matches the KIT website
+    # unique-IP / connection count and the ASmap-dashboard KIT loader
+    # (no lastConnect cut). Freshness windows stay in kit_windows for the
+    # multi-line chart; a 7d-only primary was understating KIT vs. peers.
     return SourceDay(
-        total=total, reachable=windows[KIT_REACHABLE_WINDOW],
-        note=f"no IPs in dossier; reachable = lastConnect within "
-             f"{KIT_REACHABLE_WINDOW}d",
+        total=total, reachable=total,
+        note="no IPs in public dossier; reachable = all clearnet entries "
+             "(matches KIT website scale; see kit_windows for 1d/7d cuts)",
         kit_windows=windows, kit_asns=asns)
 
 
@@ -464,20 +557,24 @@ def build_summary(dumps: dict[str, dict[str, SourceDay]],
 
     # Population sizes, latest day per source.
     add("## Population sizes (latest day per source)\n")
-    add("Each source defines reachable differently; the note column "
-        "states the definition used.\n")
+    add("**Clearnet comparisons (charts, overlap) use only IPv4+IPv6.** "
+        "Onion/I2P/CJDNS are listed for context but never enter the "
+        "clearnet totals or IP-overlap sets. Each source also defines "
+        "\"reachable\" differently; see the note column.\n")
     rows = []
     for source in sorted(dumps):
         day = latest[source]
         sd = dumps[source][day]
         note = sd.note + (", frozen upstream"
                           if source in FROZEN_SOURCES else "")
-        rows.append([source, day, sum(sd.total.values()),
+        rows.append([display(source), day, sum(sd.total.values()),
                      sum(sd.reachable.values()),
+                     sd.clearnet_reachable,
                      *(sd.reachable.get(net, 0) for net in NETWORKS),
                      note])
     add(markdown_table(
-        ["source", "day", "known total", "reachable", *NETWORKS, "note"],
+        ["source", "day", "known total", "reachable (all nets)",
+         "clearnet (v4+v6)", *NETWORKS, "note"],
         rows))
 
     # KIT freshness windows and ASN concentration.
@@ -514,16 +611,16 @@ def build_summary(dumps: dict[str, dict[str, SourceDay]],
     overlap_sources = comparable_sources(dumps, latest)
     if len(overlap_sources) >= 2:
         add("\n## Pairwise clearnet IP overlap (latest day)\n")
-        add("Hosts only, ports stripped. KIT cannot participate because "
-            "the dossier carries no IPs; frozen and subset sources are "
-            "excluded.\n")
+        add("IPv4+IPv6 hosts only (onion/I2P excluded), ports stripped. "
+            "KIT cannot participate because the public dossier carries "
+            "no IPs; frozen and subset sources are excluded.\n")
         rows = []
         for i, a in enumerate(overlap_sources):
             for b in overlap_sources[i + 1:]:
                 sa = dumps[a][latest[a]].hosts
                 sb = dumps[b][latest[b]].hosts
                 inter = len(sa & sb)
-                rows.append([a, b, len(sa), len(sb), inter,
+                rows.append([display(a), display(b), len(sa), len(sb), inter,
                              f"{jaccard(sa, sb):.3f}",
                              f"{inter / len(sa):.1%}",
                              f"{inter / len(sb):.1%}"])
@@ -555,7 +652,8 @@ def build_summary(dumps: dict[str, dict[str, SourceDay]],
             cells.append(f"{share:.0%}" if share is not None else "-")
             rows.append(cells)
         add(markdown_table(
-            ["seed", "unique A", *overlap_sources, "octavio"], rows))
+            ["seed", "unique A", *(display(s) for s in overlap_sources),
+             "octavio"], rows))
 
         failures = {short_seed_name(seed): sd.failures
                     for seed, sd in dns_days[dns_latest].items()
@@ -583,11 +681,34 @@ def render_charts(dumps: dict[str, dict[str, SourceDay]],
     import matplotlib.dates as mdates
     import matplotlib.pyplot as plt
 
+    matplotlib.rcParams.update({
+        "figure.facecolor": "white",
+        "axes.facecolor": "white",
+        "axes.edgecolor": "#c8c8c8",
+        "axes.linewidth": 0.8,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.grid": True,
+        "grid.color": "#e4e4e4",
+        "grid.linewidth": 0.6,
+        "axes.titlesize": 12.5,
+        "axes.titleweight": "bold",
+        "axes.titlepad": 12,
+        "axes.labelsize": 10.5,
+        "axes.labelcolor": "#333333",
+        "xtick.color": "#555555",
+        "ytick.color": "#555555",
+        "legend.frameon": False,
+        "legend.fontsize": 9,
+        "font.size": 10,
+        "lines.linewidth": 1.8,
+    })
+
     def new_figure(title: str, ylabel: str):
         fig, ax = plt.subplots(figsize=(9, 5), layout="constrained")
         ax.set_title(title)
         ax.set_ylabel(ylabel)
-        ax.grid(alpha=0.3)
+        ax.set_axisbelow(True)
         return fig, ax
 
     def save(fig, name: str) -> None:
@@ -602,34 +723,110 @@ def render_charts(dumps: dict[str, dict[str, SourceDay]],
         ax.xaxis.set_major_locator(locator)
         ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
 
-    # 1. Reachable clearnet nodes over time.
-    fig, ax = new_figure("Reachable clearnet nodes per source",
-                         "nodes (IPv4 + IPv6)")
-    for source in sorted(dumps):
-        if source in SUBSET_SOURCES:
-            continue  # a 300-node subset would flatten the scale
+    # 1. Reachable clearnet nodes over time, split by measurement class.
+    #    A point-in-time set (one validated round / an uptime-qualified
+    #    good list) and a look-back window over a cumulative last-seen
+    #    log answer different questions, so they get separate panels
+    #    instead of one misleading shared frame. Counts across panels
+    #    must not be compared directly; same-day IP overlap (chart 3)
+    #    is the definition-free comparison.
+    fig, (ax_top, ax_bottom) = plt.subplots(
+        2, 1, figsize=(9, 8), layout="constrained", sharex=True)
+    fig.suptitle(
+        "Reachable clearnet nodes per source "
+        "(IPv4 + IPv6 only; onion/I2P/CJDNS excluded)",
+        fontweight="bold")
+
+    ax_top.set_title(
+        "Point-in-time: one crawl round / seeder good flag",
+        fontsize=10.5, fontweight="normal", color="#333333")
+    ax_top.set_ylabel("nodes")
+    ax_top.set_axisbelow(True)
+    snapshot_sources = ("btcnodes", "achow101", "fishfoo", "sipa", "virtu")
+    for source in snapshot_sources:
+        if source not in dumps:
+            continue
         days = sorted(dumps[source])
         counts = [dumps[source][d].clearnet_reachable for d in days]
         frozen = source in FROZEN_SOURCES
-        ax.plot(as_dates(days), counts, marker="o", markersize=3,
-                label=source + (" (frozen)" if frozen else ""),
-                linestyle="--" if frozen else "-",
-                alpha=0.5 if frozen else 1.0)
-    ax.legend()
-    format_date_axis(ax)
+        label = display(source) + (
+            " (one crawl round)" if source == "btcnodes"
+            else " (good flag, frozen)" if frozen
+            else " (good flag)")
+        ax_top.plot(as_dates(days), counts, marker="o", markersize=3,
+                    color=source_color(source), label=label,
+                    linestyle="--" if frozen else "-",
+                    alpha=0.45 if frozen else 1.0)
+    ax_top.set_ylim(bottom=0)
+    ax_top.legend(fontsize=8)
+
+    ax_bottom.set_title(
+        "Cumulative last-seen / research dossiers "
+        "(KIT 'all' ≈ website unique-IP count; windows are stricter)",
+        fontsize=10.5, fontweight="normal", color="#333333")
+    ax_bottom.set_ylabel("nodes")
+    ax_bottom.set_axisbelow(True)
+    if "bitmex" in dumps:
+        days = sorted(dumps["bitmex"])
+        counts = [dumps["bitmex"][d].clearnet_reachable for d in days]
+        ax_bottom.plot(as_dates(days), counts, marker="o", markersize=3,
+                       color=source_color("bitmex"),
+                       label=f"bitnod.es (BitMEX), last seen ≤ "
+                             f"{BITMEX_FRESH_DAYS}d")
+        if min(days) < BITMEX_DAILY_SINCE:
+            switch = datetime.strptime(BITMEX_DAILY_SINCE, "%Y-%m-%d")
+            ax_bottom.axvline(switch, color=source_color("bitmex"),
+                              linewidth=0.8, linestyle=":", alpha=0.7)
+            ax_bottom.annotate(
+                "weekly exports before,\ndaily after this line",
+                xy=(switch, ax_bottom.get_ylim()[1]), xytext=(-8, -6),
+                textcoords="offset points", ha="right", va="top",
+                fontsize=8, color=source_color("bitmex"), alpha=0.9)
+    if "kit" in dumps:
+        days = sorted(dumps["kit"])
+        # Primary: full dossier size — matches KIT website / dashboard
+        # "reachable nodes" (no lastConnect cut). Then 1d as a stricter
+        # freshness cut; 7d kept faint for context only.
+        all_counts = [sum(dumps["kit"][d].total.get(net, 0)
+                          for net in CLEARNET) for d in days]
+        ax_bottom.plot(as_dates(days), all_counts, marker="o",
+                       markersize=3, color=source_color("kit"),
+                       label="KIT DSN, all entries in dossier")
+        for window, style, alpha in ((1, "-", 0.9),
+                                     (KIT_REACHABLE_WINDOW, ":", 0.4)):
+            counts = []
+            for d in days:
+                windows = dumps["kit"][d].kit_windows or {}
+                counter = windows.get(window)
+                counts.append(sum(counter.get(net, 0) for net in CLEARNET)
+                              if counter else 0)
+            ax_bottom.plot(as_dates(days), counts, marker="o",
+                           markersize=2, linestyle=style,
+                           color=source_color("kit"), alpha=alpha,
+                           label=f"KIT DSN, lastConnect ≤ {window}d")
+    ax_bottom.set_ylim(bottom=0)
+    ax_bottom.legend(fontsize=8)
+    format_date_axis(ax_bottom)
     save(fig, "counts_clearnet")
 
     # 2. Network composition per source, latest day.
-    fig, ax = new_figure("Reachable nodes by network (latest day per source)",
-                         "nodes")
+    fig, ax = new_figure(
+        "Reachable nodes by network (latest day per source)\n"
+        "full mix for context; clearnet charts use only ipv4+ipv6",
+        "nodes")
     sources = sorted(dumps)
+    labels = [display(s) for s in sources]
     bottoms = [0.0] * len(sources)
     for net in NETWORKS:
         values = [dumps[s][latest[s]].reachable.get(net, 0)
                   for s in sources]
-        ax.bar(sources, values, bottom=bottoms, label=net)
+        ax.bar(labels, values, bottom=bottoms, label=net,
+               color=NETWORK_COLORS[net], width=0.65)
         bottoms = [b + v for b, v in zip(bottoms, values)]
-    ax.legend()
+    ax.tick_params(axis="x", rotation=20)
+    ax.set_title(ax.get_title(), pad=32)
+    ax.legend(ncols=len(NETWORKS), loc="lower center",
+              bbox_to_anchor=(0.5, 1.0))
     save(fig, "network_composition")
 
     # 3. Pairwise clearnet IP overlap heatmap, latest day.
@@ -639,18 +836,20 @@ def render_charts(dumps: dict[str, dict[str, SourceDay]],
         matrix = [[jaccard(dumps[a][latest[a]].hosts,
                            dumps[b][latest[b]].hosts)
                    for b in overlap_sources] for a in overlap_sources]
+        overlap_labels = [display(s) for s in overlap_sources]
         fig, ax = plt.subplots(figsize=(1.4 * n + 2, 1.2 * n + 1.5),
                                layout="constrained")
+        ax.grid(False)
         image = ax.imshow(matrix, vmin=0, vmax=1, cmap="viridis")
-        ax.set_xticks(range(n), overlap_sources, rotation=30, ha="right")
-        ax.set_yticks(range(n), overlap_sources)
+        ax.set_xticks(range(n), overlap_labels, rotation=30, ha="right")
+        ax.set_yticks(range(n), overlap_labels)
         for i in range(n):
             for j in range(n):
                 ax.text(j, i, f"{matrix[i][j]:.2f}", ha="center",
                         va="center",
                         color="white" if matrix[i][j] < 0.6 else "black")
         ax.set_title("Clearnet IP overlap (Jaccard), latest day\n"
-                     "KIT absent: dossier has no IPs")
+                     "IPv4+IPv6 only · KIT absent: dossier has no IPs")
         fig.colorbar(image, shrink=0.8)
         save(fig, "overlap_jaccard")
 
@@ -663,7 +862,8 @@ def render_charts(dumps: dict[str, dict[str, SourceDay]],
         days = [d for d in sorted(dns_days) if seed in dns_days[d]]
         ax.plot(as_dates(days),
                 [dns_days[d][seed].unique_addresses for d in days],
-                marker="o", markersize=3, label=short_seed_name(seed))
+                marker="o", markersize=3, color=seed_color(seed),
+                label=short_seed_name(seed))
     ax.legend(fontsize=8)
     format_date_axis(ax)
     save(fig, "dns_unique_addrs")
@@ -675,7 +875,7 @@ def render_charts(dumps: dict[str, dict[str, SourceDay]],
     if common_days:
         fig, ax = new_figure(
             f"Share of seed-served IPv4 addresses found reachable by "
-            f"{COVERAGE_REFERENCE}", "coverage")
+            f"{display(COVERAGE_REFERENCE)}", "coverage")
         for seed in seeds:
             points = [
                 (d, coverage(dns_days[d][seed].a_records,
@@ -685,6 +885,7 @@ def render_charts(dumps: dict[str, dict[str, SourceDay]],
             if points:
                 ax.plot(as_dates(d for d, _ in points),
                         [c for _, c in points], marker="o", markersize=3,
+                        color=seed_color(seed),
                         label=short_seed_name(seed))
         ax.set_ylim(0, 1.05)
         ax.yaxis.set_major_formatter(lambda v, _: f"{v:.0%}")
@@ -693,19 +894,28 @@ def render_charts(dumps: dict[str, dict[str, SourceDay]],
         save(fig, "seed_coverage")
 
     # 6. Octavio's active reachability per seed over its full history.
+    #    Daily values are noisy, so the bold line is a centered 7-day
+    #    rolling mean with the raw series faint underneath.
     if octavio:
         fig, ax = new_figure(
-            "Active reachability per DNS seed\n"
+            "Active reachability per DNS seed (7-day rolling mean)\n"
             "source: octavio.xyz DNS seed monitor", "reachable share")
         octavio_seeds = sorted({s for day in octavio.values() for s in day})
         for seed in octavio_seeds:
             days = [d for d in sorted(octavio) if seed in octavio[d]]
-            ax.plot(as_dates(days), [octavio[d][seed] for d in days],
-                    marker="o", markersize=2, linewidth=1,
+            values = [octavio[d][seed] for d in days]
+            smoothed = [
+                sum(window) / len(window)
+                for window in (values[max(0, i - 3): i + 4]
+                               for i in range(len(values)))]
+            color = seed_color(seed)
+            ax.plot(as_dates(days), values, linewidth=0.7, alpha=0.18,
+                    color=color)
+            ax.plot(as_dates(days), smoothed, linewidth=1.8, color=color,
                     label=short_seed_name(seed))
         ax.set_ylim(0, 1.05)
         ax.yaxis.set_major_formatter(lambda v, _: f"{v:.0%}")
-        ax.legend(fontsize=7)
+        ax.legend(fontsize=7, ncols=2, loc="lower left")
         format_date_axis(ax)
         save(fig, "seed_reachable_share")
 

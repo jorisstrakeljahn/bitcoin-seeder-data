@@ -55,7 +55,7 @@ Both collectors are Python stdlib only, idempotent per day and append-only. Sour
 
 ## Caveats
 
-- Collection started 2026-07-07; btcnodes is backfilled to 2026-05-10 and KIT keeps its own history online back to 2015.
+- Collection started 2026-07-07; btcnodes and KIT dossiers are backfilled to 2026-05-10, bitnod.es to 2026-05-21 (manual downloads / index scrape, flagged in the manifest). KIT's public index reaches back to 2015.
 - DNS responses are sampled from a single vantage point (GitHub Actions runners in US datacenters), so per-seed address counts are lower bounds and GeoDNS effects are invisible.
 - Operators refresh their dumps on their own schedules; identical fetches are detectable via the manifest checksums.
 - The sipa and virtu dumps are frozen upstream (details in SOURCES.md); both DNS seeds themselves remain live.
