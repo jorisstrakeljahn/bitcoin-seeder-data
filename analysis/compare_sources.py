@@ -21,9 +21,11 @@ are not comparable. The per-source "reachable" definitions used here:
   BITMEX_FRESH_DAYS of the newest export date count as reachable.
 - KIT dossier: keyed by anonymized hashes, no IP addresses, so KIT can
   never join IP-overlap comparisons. It carries whois/ASN on nearly all
-  nodes and therefore powers the ASN view. The primary clearnet count is
-  the full dossier (matches the KIT website unique-IP scale); chart also
-  shows ``lastConnect`` ≤1d / ≤7d windows as stricter subsets.
+  nodes and therefore powers the ASN view. Every entry is connected to
+  the KIT monitor at dossier creation time; the full dossier is the
+  same-day population (matches the KIT website unique-IP scale).
+  ``lastConnect`` is when that connection was initiated, not last-seen;
+  chart also shows connection-age ≤1d / ≤7d buckets.
 - Blockchair: a small "recently active" subset, kept as a cross-check
   and excluded from coverage denominators.
 
@@ -77,10 +79,10 @@ BITMEX_FRESH_DAYS = 1
 #: continuous series.
 BITMEX_DAILY_SINCE = "2026-06-26"
 
-#: Freshness windows (days) for KIT lastConnect counts. The 7 day
-#: window doubles as KIT's "reachable" population.
+#: Connection-age windows (days) for KIT lastConnect counts.
+#: lastConnect is connection start time; every dossier peer is live.
 KIT_WINDOWS = (1, 7, 30)
-KIT_REACHABLE_WINDOW = 7
+KIT_AGE_CHART_WINDOW = 7
 
 NETWORKS = ("ipv4", "ipv6", "onion", "i2p", "cjdns")
 CLEARNET = ("ipv4", "ipv6")
@@ -319,14 +321,14 @@ def parse_kit(path: Path) -> SourceDay:
         asn = (node.get("whois") or {}).get("asn")
         if asn:
             asns[asn] += 1
-    # Reachable = full dossier clearnet size. That matches the KIT website
-    # unique-IP / connection count and the ASmap-dashboard KIT loader
-    # (no lastConnect cut). Freshness windows stay in kit_windows for the
-    # multi-line chart; a 7d-only primary was understating KIT vs. peers.
+    # Reachable = full dossier clearnet size: every entry is connected at
+    # snapshot time (matches KIT website / ASmap-dashboard KIT loader).
+    # kit_windows are connection-age buckets from lastConnect, not
+    # freshness / last-seen cuts.
     return SourceDay(
         total=total, reachable=total,
         note="no IPs in public dossier; reachable = all clearnet entries "
-             "(matches KIT website scale; see kit_windows for 1d/7d cuts)",
+             "(all connected at snapshot; kit_windows = connection age)",
         kit_windows=windows, kit_asns=asns)
 
 
@@ -577,14 +579,16 @@ def build_summary(dumps: dict[str, dict[str, SourceDay]],
          "clearnet (v4+v6)", *NETWORKS, "note"],
         rows))
 
-    # KIT freshness windows and ASN concentration.
+    # KIT connection-age windows and ASN concentration.
     if "kit" in latest:
         kit = dumps["kit"][latest["kit"]]
-        add("\n## KIT dossier freshness windows\n")
-        add("The dossier accumulates nodes over months, so a raw count "
-            "is not a same-day population.\n")
+        add("\n## KIT dossier connection-age windows\n")
+        add("Every peer in a dossier is connected to the monitor at "
+            "snapshot time. `lastConnect` is when that connection was "
+            "initiated (not last-seen), so the windows below are "
+            "connection-age buckets, not freshness cuts.\n")
         assert kit.kit_windows is not None and kit.kit_asns is not None
-        window_rows = [[f"lastConnect within {w}d",
+        window_rows = [[f"connection age ≤ {w}d",
                         c.get("ipv4", 0), c.get("ipv6", 0),
                         sum(c.values())]
                        for w, c in sorted(kit.kit_windows.items())]
@@ -784,16 +788,15 @@ def render_charts(dumps: dict[str, dict[str, SourceDay]],
                 fontsize=8, color=source_color("bitmex"), alpha=0.9)
     if "kit" in dumps:
         days = sorted(dumps["kit"])
-        # Primary: full dossier size — matches KIT website / dashboard
-        # "reachable nodes" (no lastConnect cut). Then 1d as a stricter
-        # freshness cut; 7d kept faint for context only.
+        # Primary: full dossier = live connections at snapshot time.
+        # Extra lines: connection-age buckets from lastConnect.
         all_counts = [sum(dumps["kit"][d].total.get(net, 0)
                           for net in CLEARNET) for d in days]
         ax_bottom.plot(as_dates(days), all_counts, marker="o",
                        markersize=3, color=source_color("kit"),
-                       label="KIT DSN, all entries in dossier")
+                       label="KIT DSN, all connected (dossier)")
         for window, style, alpha in ((1, "-", 0.9),
-                                     (KIT_REACHABLE_WINDOW, ":", 0.4)):
+                                     (KIT_AGE_CHART_WINDOW, ":", 0.4)):
             counts = []
             for d in days:
                 windows = dumps["kit"][d].kit_windows or {}
@@ -803,7 +806,7 @@ def render_charts(dumps: dict[str, dict[str, SourceDay]],
             ax_bottom.plot(as_dates(days), counts, marker="o",
                            markersize=2, linestyle=style,
                            color=source_color("kit"), alpha=alpha,
-                           label=f"KIT DSN, lastConnect ≤ {window}d")
+                           label=f"KIT DSN, connection age ≤ {window}d")
     ax_bottom.set_ylim(bottom=0)
     ax_bottom.legend(fontsize=8)
     format_date_axis(ax_bottom)
